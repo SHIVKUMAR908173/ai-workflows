@@ -1,0 +1,403 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "9755fd69-163d-4eb7-a54d-d073280dbb82",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        4224,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "rssUrl",
+              "value": "https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "contentTheme",
+              "value": "Artificial Intelligence and Machine Learning",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "slackChannel",
+              "value": "C08457YNZSL",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f4640029-edad-4d63-ad46-bb2b42b96307",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4448,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Workflow Configuration').first().json.rssUrl }}",
+        "options": {}
+      },
+      "id": "60ec71a3-2865-4705-b140-4e45408c4a92",
+      "name": "Fetch RSS Articles",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        4672,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Article Title: {{ $json.title }}\nArticle Content: {{ $json.contentSnippet }}\nArticle Link: {{ $json.link }}",
+        "options": {
+          "systemMessage": "=You are a content curator assistant.\n\nYour task is to:\n1. Analyze the provided article based on the theme: {{ $('Workflow Configuration').first().json.contentTheme }}\n2. Determine if the article is relevant to this theme (respond with \"relevant\" or \"not_relevant\")\n3. If relevant, generate a tweet summary that is 280 characters or less\n4. Return your response in this exact format:\nRELEVANCE: [relevant or not_relevant]\nTWEET: [your tweet text if relevant, otherwise leave empty]\n\nGuidelines:\n- The tweet should be engaging and informative\n- Include the article link at the end\n- Stay within 280 characters including the link\n- Use appropriate hashtags if space allows"
+        }
+      },
+      "id": "bac48d6c-c442-4b2f-91f9-2207e627267e",
+      "name": "Content Curator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        4896,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "id": "14656d49-b8b8-4293-a70c-64a5dd01100c",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        4976,
+        1168
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "3PTCFASo8ZNMhwnX",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Content Curator Agent').item.json.output }}",
+              "rightValue": "RELEVANCE: relevant",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "16e60870-91e5-4a0e-9425-a8235cdac317",
+      "name": "Check If Relevant",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5248,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.slackChannel }}"
+        },
+        "text": "=📝 *New Tweet for Approval*\n\n{{ $json.tweet }}\n\n*Article:* {{ $json.title }}\n*Link:* {{ $json.link }}\n\nPlease approve or reject:\n✅ Approve: {{ $json.approvalUrl }}\n❌ Reject: {{ $json.rejectionUrl }}",
+        "otherOptions": {}
+      },
+      "id": "9f7e779d-ddd3-4f07-aa04-2a5576990c6c",
+      "name": "Send to Slack for Approval",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        5696,
+        944
+      ],
+      "webhookId": "60a6dad8-1e3a-454c-9548-fa7ab3b54cf2",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "wUNIClbIaYrDKEUY",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "51d8dc20-99ff-45d4-aea8-605e206c5602",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        4224,
+        1280
+      ],
+      "webhookId": "4f85cb63-ccf9-41bc-8656-b2336d058aa9"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Approval Webhook').item.json.query.status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "43fa6f4d-73af-41e7-accc-583d36884cf3",
+      "name": "Check Approval Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4448,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.query.tweet }}",
+        "additionalFields": {}
+      },
+      "id": "873ed604-7942-4344-ac73-38350bc95636",
+      "name": "Post to Twitter",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "position": [
+        4672,
+        1280
+      ],
+      "credentials": {
+        "twitterOAuth2Api": {
+          "id": "vW7FWF90efEbf4rc",
+          "name": "X account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract the tweet text from the AI output\nconst aiOutput = $input.item.json.output || '';\nconst tweetMatch = aiOutput.match(/TWEET:\\s*(.+?)(?:\\n|$)/s);\nconst tweetText = tweetMatch ? tweetMatch[1].trim() : '';\n\n// Get the article data\nconst articleTitle = $input.item.json.title || '';\nconst articleLink = $input.item.json.link || '';\n\n// Encode the tweet for URL parameter\nconst encodedTweet = encodeURIComponent(tweetText);\n\n// Build the webhook base URL\nconst webhookBaseUrl = 'https://nobi239.app.n8n.cloud/webhook/approval';\n\n// Build approval and rejection URLs\nconst approvalUrl = `${webhookBaseUrl}?status=approved&tweet=${encodedTweet}`;\nconst rejectionUrl = `${webhookBaseUrl}?status=rejected`;\n\n// Return the data with URLs\nreturn {\n  json: {\n    output: aiOutput,\n    tweet: tweetText,\n    title: articleTitle,\n    link: articleLink,\n    approvalUrl: approvalUrl,\n    rejectionUrl: rejectionUrl\n  }\n};"
+      },
+      "id": "afc4bc7a-3ebe-4d11-8901-e2d5c4981583",
+      "name": "Build Approval URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5472,
+        944
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c1b96c55-379b-4797-be0f-ab70b5b43525",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        4224,
+        1040
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Fetch RSS Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RSS Articles": {
+      "main": [
+        [
+          {
+            "node": "Content Curator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Content Curator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Curator Agent": {
+      "main": [
+        [
+          {
+            "node": "Check If Relevant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Relevant": {
+      "main": [
+        [
+          {
+            "node": "Build Approval URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Approval Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval Status": {
+      "main": [
+        [
+          {
+            "node": "Post to Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Approval URLs": {
+      "main": [
+        [
+          {
+            "node": "Send to Slack for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4533e8ae-9656-4610-b3ca-5dbe7995dd59",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2f0da8a6950969973d761521f907c96185d3003e1d08786fcac6b41f6dfd8153"
+  },
+  "id": "tKQhsKuoL8r5BJDU",
+  "tags": []
+}
